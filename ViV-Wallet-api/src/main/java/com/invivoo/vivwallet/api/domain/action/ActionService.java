@@ -1,5 +1,6 @@
 package com.invivoo.vivwallet.api.domain.action;
 
+import com.google.common.collect.Lists;
 import com.invivoo.vivwallet.api.domain.user.User;
 import com.invivoo.vivwallet.api.infrastructure.lynx.LynxConnector;
 import com.invivoo.vivwallet.api.infrastructure.lynx.model.Activities;
@@ -9,11 +10,7 @@ import javax.transaction.Transactional;
 import java.time.LocalDateTime;
 import java.time.Month;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -80,12 +77,16 @@ public class ActionService {
 
     private List<Action> updateActions(List<Action> actionsFromLynx) {
         actionRepository.deleteAllByStatus(ActionStatus.TO_VALIDATE);
-        Map<String, Action> validatedActions = actionRepository.findAllByLynxActivityIdIn(actionsFromLynx.stream()
-                                                                                                            .map(Action::getLynxActivityId)
-                                                                                                            .collect(
-                                                                                                                                       Collectors.toList()))
-                                                                  .stream()
-                                                                  .collect(Collectors.toMap(this::getActionUniqueKey, a -> a));
+        List<List<Action>> actionsFromLynxAsChunks = Lists.partition(actionsFromLynx, 1000);
+        Map<String, Action> validatedActions = new HashMap<>();
+        for (List<Action> actionsFromLynxChunk : actionsFromLynxAsChunks) {
+            validatedActions.putAll(actionRepository.findAllByLynxActivityIdIn(
+                            actionsFromLynxChunk.stream()
+                                .map(Action::getLynxActivityId)
+                                .collect(Collectors.toList()))
+                    .stream()
+                    .collect(Collectors.toMap(this::getActionUniqueKey, a -> a)));
+        }
         List<Action> actionsToSave = actionsFromLynx.stream()
                                                     .filter(actionFromLynx -> !validatedActions.containsKey(getActionUniqueKey(
                                                             actionFromLynx)))
